@@ -28,6 +28,39 @@ import shutil
 import os
 
 app = FastAPI()
+@app.post("/api")
+async def handle_api(request: Request):
+    # --- optional request logger (toggle via DEBUG_LOG_REQUESTS=1) ---
+    if os.getenv("DEBUG_LOG_REQUESTS") == "1":
+        try:
+            raw = await request.body()  # Starlette caches; downstream can still read
+            max_bytes = 200_000
+            preview = raw[:max_bytes]
+            truncated = len(raw) > max_bytes
+
+            # redact sensitive headers
+            headers = dict(request.headers)
+            if "authorization" in headers:
+                headers["authorization"] = "[redacted]"
+
+            # text/binary-safe body preview
+            try:
+                body_view = preview.decode("utf-8", errors="ignore")
+                if truncated:
+                    body_view += "\n...[truncated]"
+            except Exception:
+                # fall back to small hex if non-text
+                hex_snip = preview[:256].hex()
+                body_view = f"[binary] {hex_snip}" + ("...[truncated]" if truncated else "")
+
+            print("\n=== 📩 Incoming /api ===")
+            print(f"Method: {request.method}")
+            print(f"URL:    {request.url}")
+            print(f"Headers: {headers}")
+            print(f"Query:   {dict(request.query_params)}")
+            print("Body preview:\n" + body_view + "\n")
+        except Exception as e:
+            print(f"[request-log-skip] {e}")
 load_dotenv()
 
 # --- Precise file tracking & cleanup helpers ---
